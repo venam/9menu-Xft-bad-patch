@@ -1,0 +1,136 @@
+--- ../../9menu/9menu.c	2013-08-07 21:00:02.985134850 +0300
++++ 9menu.c	2013-08-07 16:50:23.756284299 +0300
+@@ -62,6 +62,7 @@
+ #include <X11/Xutil.h>
+ #include <X11/keysymdef.h>
+ #include <X11/keysym.h>
++#include <X11/Xft/Xft.h>
+ 
+ char version[] = "@(#) 9menu version 1.8";
+ 
+@@ -76,7 +77,8 @@
+ char *bgcname = NULL;
+ Colormap defcmap;
+ XColor color;
+-XFontStruct *font;
++XftDraw *xftdraw;
++XftFont *font;
+ Atom wm_protocols;
+ Atom wm_delete_window;
+ int g_argc;			/* for XSetWMProperties to use */
+@@ -88,16 +90,30 @@
+ Window savewindow;
+ 
+ char *fontlist[] = {	/* default font list if no -font */
+-	"pelm.latin1.9",
+-	"lucm.latin1.9",
+-	"blit",
+-	"9x15bold",
+-	"9x15",
+-	"lucidasanstypewriter-12",
+-	"fixed",
++	"pragmatapro-10",
++	"Serif-10",
++	"cure-10",
++	"ubuntu-10",
++	"terminal-10",
++	"aria-10",
++	"fixed-10",
+ 	NULL
+ };
+ 
++struct colors
++{
++	unsigned short red, green, blue;
++} cols[] =
++{
++	{0x2222, 0x2222, 0x2222},		  /* 0. light gray */
++	{0x3232, 0x3232, 0x3232},		  /* 1. mid gray */
++	{0x3232, 0x3232, 0x3232},		  /* 2. dark gray */
++	{0x3232, 0x3232, 0x3232},		  /* 3. white */
++	{0x3232, 0x3232, 0x3232},		  /* 4. darkest gray */
++	{0xeeec, 0xeeec, 0xeeec},		  /* 5. black */
++	{0xd75c, 0xaefb, 0xbaea}  		  /* 6. redish */
++};
++
+ /* the 9menu icon, for garish window managers */
+ #define nine_menu_width 40
+ #define nine_menu_height 40
+@@ -379,16 +395,15 @@
+ 
+ 	/* try user's font first */
+ 	if (fontname != NULL) {
+-		font = XLoadQueryFont(dpy, fontname);
++		font = XftFontOpenName (dpy, screen, fontname);
+ 		if (font == NULL)
+ 			fprintf(stderr, "%s: warning: can't load font %s\n",
+ 				progname, fontname);
+ 	}
+-
++	else {
+ 	/* if no user font, try one of our default fonts */
+-	if (font == NULL) {
+ 		for (i = 0; fontlist[i] != NULL; i++) {
+-			font = XLoadQueryFont(dpy, fontlist[i]);
++			font = XftFontOpenName(dpy, screen, fontlist[i]);
+ 			if (font != NULL)
+ 				break;
+ 		}
+@@ -401,10 +416,10 @@
+ 
+ 	gv.foreground = black^white;
+ 	gv.background = white;
+-	gv.font = font->fid;
+ 	gv.function = GXxor;
+ 	gv.line_width = 0;
+-	mask = GCForeground | GCBackground | GCFunction | GCFont | GCLineWidth;
++	gv.graphics_exposures = False;
++	mask = GCBackground| GCGraphicsExposures | GCFunction| GCLineWidth;
+ 	gc = XCreateGC(dpy, root, mask, &gv);
+ 
+ 	signal(SIGCHLD, reap);
+@@ -491,10 +506,11 @@
+ 
+ 	dx = 0;
+ 	for (i = 0; i < numitems; i++) {
+-		wide = XTextWidth(font, labels[i], strlen(labels[i])) + 4;
++		wide = font->max_advance_width *strlen(labels[i]) +4;
+ 		if (wide > dx)
+ 			dx = wide;
+ 	}
++    /* the maximum width of the window */
+ 	wide = dx;
+ 
+ 	old = cur = -1;
+@@ -513,6 +529,8 @@
+ 	XSelectInput(dpy, menuwin, MenuMask);
+ 
+ 	XMapWindow(dpy, menuwin);
++    xftdraw = XftDrawCreate (dpy, menuwin, DefaultVisual (dpy, screen),
++		DefaultColormap (dpy, screen));
+ 
+ 	ico = 1;	/* warp to first item */
+ 	i = 0;		/* save menu Item position */
+@@ -757,11 +775,20 @@
+ int cur, high, wide;
+ {
+ 	int tx, ty, i;
++	XGlyphInfo ext;
++	XftColor col;
++	//#7a88a3
++	col.color.alpha = 0xffff;
++	col.color.red   = 0x7aFF;
++	col.color.green = 0x88FF;
++	col.color.blue  = 0xa3FF;
++	unsigned short red, green, blue;
++	XSetForeground (dpy, gc, 0x151);
+ 
+ 	for (i = 0; i < numitems; i++) {
+-		tx = (wide - XTextWidth(font, labels[i], strlen(labels[i]))) / 2;
++		tx = - ((strlen(labels[i])*font->max_advance_width-wide) / 2+0.5);
+ 		ty = i*high + font->ascent + 1;
+-		XDrawString(dpy, menuwin, gc, tx, ty, labels[i], strlen(labels[i]));
++		XftDrawString8 (xftdraw, &col, font, tx, ty, labels[i], strlen(labels[i]));
+ 	}
+ 	if (cur >= 0 && cur < numitems)
+ 		XFillRectangle(dpy, menuwin, gc, 0, cur*high, wide, high);
